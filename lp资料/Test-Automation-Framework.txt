@@ -1,0 +1,402 @@
+1）run.py
+run.py 是整个 API 自动化测试框架的 唯一入口文件 ，它就像一个"一键启动器"——你只需要执行 python run.py ，它就会自动完成从 运行测试到生成报告 的全部流程：
+首先，它会读取配置文件中的报告类型（Allure 或 TM），然后调用 pytest 框架扫描 testcase 目录下的所有测试用例，自动执行每个测试方法；执行过程中，它会把测试结果分别保存成 Allure 专用的 JSON 文件（用于生成漂亮的交互式报告）和 JUnit 格式的 XML 文件（用于 CI/CD 工具集成）；测试完成后，它会复制环境配置文件到报告目录，并启动 Allure 报告服务（或直接打开 TM HTML 报告），自动在浏览器中展示测试结果，包括每个用例的执行状态、失败原因、接口请求/响应详情等。
+
+pytest.main() 会启动 pytest 框架  pytest.main(['-s', '-v', '--alluredir=./report/temp', './testcase', ...])
+pytest 会扫描 ./testcase 目录，自动发现所有符合规则的测试文件：
+- 文件名以 test_ 开头 → 发现 test_debug_api.py 、 test_productList.py 等
+- 类名以 Test 开头 → 发现 TestUserManager 、 TestProductManager 等
+- 方法名以 test_ 开头 → 发现 test_add_user 、 test_update_user 等
+
+2）./testcase目录
+以testcase\Single interface   和    testcase\Business interface  两个解析
+
+testcase\Single interface
+包含两种文件，py文件以及yaml文件
+
+1>>>>>>>>>>>>>>>test_debug_api.py
+
+这个文件的作用就是把 YAML 中的测试用例和框架的执行逻辑连接起来 ，让用户管理模块的所有接口测试能够按照正确的顺序自动化执行。
+部分代码：
+
+@allure.feature(next(m_id) + '用户管理模块（单接口）')
+class TestUserManager:
+
+    # 场景，allure报告的目录结构
+    @allure.story(next(c_id) + "新增用户")
+    # 测试用例执行顺序设置
+    @pytest.mark.run(order=1)
+    # 参数化，yaml数据驱动
+    @pytest.mark.parametrize('base_info,testcase', get_testcase_yaml("./testcase/Single interface/addUser.yaml"))
+    def test_add_user(self, base_info, testcase):
+        allure.dynamic.title(testcase['case_name'])
+        RequestBase().specification_yaml(base_info, testcase)
+代码解析：
+{
+@allure.feature()：Allure 测试报告一级分类标签，代表一个大功能模块，报告左侧最顶层分组 ，next(m_id)：m_id 是生成器对象，每次next()调用数字自增1
+class TestUserManager:定义 pytest 测试类，把同一业务模块（用户增删改查）的所有测试方法放在一个类里统一管理。类下所有test_开头方法都会被 pytest 识别为测试用例。
+@allure.story()：Allure 二级分类，挂在 feature 模块下面，代表单个业务场景。next(c_id)：场景自增生成器，每次调用+1。
+@pytest.mark.run(order=1)测试用例执行顺序设置，数字越小越优先执行
+@pytest.mark.parametrize('base_info,testcase', get_testcase_yaml("./testcase/Single interface/addUser.yaml"))
+（
+@pytest.mark.parametrize(变量名列表, 数据源)：pytest 参数化装饰器，自动循环多条测试数据执行同一段代码；	
+'base_info,testcase'：定义两个接收变量，每条数据会自动拆分成这两个值传入函数；
+get_testcase_yaml("./testcase/Single interface/addUser.yaml")：
+调用之前写好的读取 yaml 函数，读取新增用户用例文件，返回格式：
+[
+    [公共baseInfo字典, 第一条测试场景字典],
+    [公共baseInfo字典, 第二条测试场景字典],
+    ...
+]
+详细如下：
+[
+    # 第一组数据：[公共baseInfo, 第一条用例]
+    [
+        {
+            "api_name": "新增用户",
+            "url": "/dar/user/addUser",
+            "method": "POST",
+            "header": {
+                "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8"
+            }
+        },
+        {
+            "case_name": "正常新增用户",
+            "data": {
+                "username": "testadduser",
+                "password": "tset6789890",
+                "role_id": "123456789",
+                "dates": "2023-12-31",
+                "phone": "13800000000",
+                "token": "${get_extract_data(token)}"
+            },
+            "validation": [
+                {"contains": {"status_code": 200}},
+                {"contains": {"msg": "新增成功"}}
+            ],
+            "extract": {
+                "user_id": "$.data.id"
+            }
+        }
+    ],
+    # 第二组数据：[公共baseInfo, 第二条用例]
+    [
+        {
+            "api_name": "新增用户",
+            "url": "/dar/user/addUser",
+            "method": "POST",
+            "header": {
+                "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8"
+            }
+        },
+        {
+            "case_name": "缺少token新增失败",
+            "data": {
+                "username": "testadduser",
+                "password": "tset6789890",
+                "role_id": "123456789",
+                "dates": "2023-12-31",
+                "phone": "13800000000",
+                "token": None
+            },
+            "validation": [
+                {"contains": {"status_code": 200}},
+                {"contains": {"msg": "新增失败"}}
+            ]
+        }
+    ]
+]
+get_testcase_yaml(文件路径) 读取 yaml 并组装好每组两个元素的二维数组，
+'base_info,testcase' 就是定义两个变量，用来接收每组里的第 1 个、第 2 个元素。
+例如：addUser.yaml 里写了 4 条测试场景，@pytest.mark.parametrize 会自动循环执行 4 次，不用重复写 4 份接口代码。
+）
+test_add_user 定义 pytest 测试方法：方法名必须以test_开头，pytest 才会识别为可执行用例；
+allure.dynamic.title(testcase['case_name')：动态设置单条用例的报告标题，testcase['case_name']：从 yaml 每条用例里读取 case_name 字段作为标题。
+RequestBase().specification_yaml(base_info, testcase)整套自动化框架核心调度入口，发请求 + 断言 + 提取变量，一行完成全部接口流程，之后详细解释流程,这里先不写：
+1.解析base_info：拿到接口地址、请求方式、请求头；
+2.解析testcase里的data，识别${get_extract_data(token)}这类变量，调用 DebugTalk 替换真实 token；
+3.底层调用 SendRequest 类发送 http 接口；
+4.读取validation字段，自动执行响应结果断言（状态码、返回文案校验）；
+5.读取extract字段，用 jsonpath 提取返回值（token），存入 extract.yaml 供后续接口使用。
+}
+
+2>>>>>>>>>>>>>>>test_debug_api.py
+部分代码：
+baseInfo:
+    api_name: 新增用户
+    url: /dar/user/addUser
+    method: POST
+    header:
+      Content-Type: application/x-www-form-urlencoded;charset=UTF-8
+  testCase:
+    - case_name: 正常新增用户
+      data:
+        username: testadduser
+        password: tset6789890
+        role_id: 123456789
+        dates: '2023-12-31'
+        phone: 13800000000
+        token: ${get_extract_data(token)}
+      validation:
+        - contains: { 'status_code': 200 }
+        - contains: { 'msg': '新增成功' }
+    - case_name: 无效新增·缺少token
+      data:
+        username: testadduser
+        password: tset6789890
+        role_id: 123456789
+        dates: '2023-12-31'
+        phone: 13800000000
+        token:
+      validation:
+        - contains: { 'status_code': 200 }
+        - contains: { 'msg': '新增失败' }
+
+baseInfo：接口通用配置，所有场景共用
+api_name：接口名称（打印日志、allure 报告展示）
+url：接口路由
+method：请求方式 POST/GET
+header：全局请求头
+
+testCase 单条场景
+case_name：用例名称（动态 allure 标题）
+data：接口请求表单参数，${get_extract_data(token)} 会被工具替换登录缓存的 token
+validation：响应断言规则，执行完接口自动校验返回码、提示文本
+
+3>>>>>>>>>>>>>>>test_debug_api.py里的工具类get_testcase_yaml
+读取单接口标准 yaml 用例文件，自动拆分公共baseInfo和每条独立testCase，作用前面解释过，举过例子
+
+4>>>>>>>>>>>>>>>test_debug_api.py里的工具类apiutil.py 以及 RequestBase
+这是整套自动化测试框架核心调度中枢类，串联前面所有工具：ReadYamlData、DebugTalk、SendRequest、Assertions，一站式完成：
+YAML 参数变量替换 → 拼接完整接口地址 → 发起 HTTP 请求 → 从返回结果提取 token / 参数存入全局 yaml → 执行响应结果断言。
+所有 pytest 用例最终都会调用 RequestBase().specification_yaml(base_info, test_case) 执行一条接口用例。
+
+apiutil.py里面定义了RequestBase类
+初始化了 self.run = SendRequest()
+        self.conf = OperationConfig()
+        self.read = ReadYamlData()
+        self.asserts = Assertions()  
+这四个方法，self.run = SendRequest() — HTTP 请求发送器，封装 requests 库，提供统一的 HTTP 请求发送能力。
+	      self.conf = OperationConfig() — 配置文件读取器,封装 configparser 库，读取 .ini 格式的配置文件。
+		  self.read = ReadYamlData() — YAML 文件读写器，封装 pyyaml 库，提供 YAML 文件的读写能力。
+		  self.asserts = Assertions() — 断言工具，封装多种断言方式，验证接口响应是否符合预期。
+
+类里面的方法包括：
+	replace_load
+（ 
+yaml数据替换解析，将yaml文件里面的${}替换为对应的值；输入：yaml文件里面的参数值，输出：替换后的数据data。
+例如，原始yaml的data：{"token": "${get_extract_data(token)}", "date": "${end_year_time()}"}   执行后，替换为{"token": "eyJxxx", "date": "2026-07-09"}
+）
+	allure_attach_response
+（
+格式化接口返回的 JSON 响应，自动添加缩进、保留中文不乱码；处理非 JSON 返回（二进制 / 文本）直接原样返回；格式化后的数据附加到 Allure 测试报告里，方便查看接口返回内容，不用翻日志。是类方法，不需要实例就能调用。
+json原始：response = {
+    "status_code": 200,
+    "msg": "新增成功",
+    "data": {"user_id": 10086}
+}
+返回：{
+    "status_code": 200,
+    "msg": "新增成功",
+    "data": {
+        "user_id": 10086
+    }
+}
+非 JSON，原样返回
+）
+	extract_data提取单个值   后面extract_data_list提取多个值成列表同理
+（
+从接口的返回值中可以使用正则表达式或者json参数提取需要的数据，并保存到 extract.yaml 文件中 ，以便后续接口（比如下单接口需要登录接口返回的 token）使用。
+参数注入调用 extract_data 的过程：YAML 用例里手写的 extract 字段经 get_testcase_yaml 解析成字典 → 通过 @pytest.mark.parametrize 把整条 test_case 注入测试函数 → 测试函数调用 RequestBase().specification_yaml(base_info, testcase) → 该方法内部用 test_case.pop('extract', None) 把 extract 字段取出并从字典中移除 → 接口请求成功后，判断 if extract is not None 即调用 self.extract_data(extract, res.text) ，将 extract 字典和接口响应字符串作为两个参数传入，完成从响应中提取数据并写入 extract.yaml。
+步骤：
+第一，YAML 原始配置
+testCase:
+  - case_name: 检查登录正常
+    json:
+      username: test123
+      password: qwe666
+    validation:
+      - contains: { 'msg': '调用成功' }
+    extract:
+      user_token: $.data.user_token
+第二，YAML 解析后，test_case 字典长这样
+test_case = {
+    'case_name': '检查登录正常',
+    'json': {'username': 'test123', 'password': 'qwe666'},
+    'validation': [{"contains": {"msg": "调用成功"}}],
+    'extract': {'user_token': '$.data.user_token'}   # ← extract 还在字典里
+}
+第三，## 执行 extract = test_case.pop('extract', None)pop 做两件事： 取出 + 删除 。
+# 局部变量 extract 拿到了值
+extract = {'user_token': '$.data.user_token'}
+
+# test_case 字典里 extract 键已被移除，避免后面被当请求参数发出去
+test_case = {
+    'case_name': '检查登录正常',
+    'json': {'username': 'test123', 'password': 'qwe666'},
+    'validation': [{"contains": {"msg": "调用成功"}}]
+    # ← extract 没了
+}
+第四，发送请求，假设接口返回
+{
+    "code": 200,
+    "msg": "调用成功",
+    "data": {
+        "user_token": "A7Ef0d8e8BB5A89D81b03bBeb13a2",
+        "user_id": 1001
+    }
+}
+第五，执行 if extract is not None: self.extract_data(extract, res.text)
+因为 extract = {'user_token': '$.data.user_token'} 不是 None ，条件成立，进入 extract_data 内部执行
+extarct_data = {'user_token': 'A7Ef0d8e8BB5A89D81b03bBeb13a2'}
+self.read.write_yaml_data(extarct_data)   # 写入 extract.yaml
+第六，在需要登录态的接口里，通过 ${get_extract_data(user_token)} 占位符，框架的 replace_load 方法会去 extract.yaml 读取 user_token 的值，替换到请求参数中，实现接口间的数据传递。
+
+总之，整条链路一句话总结 ：YAML 里的 extract: {user_token: $.data.user_token} → pop 取出成局部变量 → 接口响应回来后传入 extract_data → jsonpath 从响应里挖出 token → 写入 extract.yaml → 下一个接口通过 ${get_extract_data()} 读取使用。
+）
+
+	specification_yaml(self, base_info, test_case)
+（
+核心主流程，specification_yaml 是一个 编排型方法 ：它本身不做请求发送、不做断言、不做提取，而是把这三件事按固定顺序串起来，并负责把 test_case 字典里非请求参数的字段（case_name/validation/extract/files）逐一剥离，保证传给请求函数的是干净的请求体。整个方法 = 「拆解 YAML → 替换占位符 → 发请求 → 提数据 → 校验」的流水线。
+接收 base_info （接口配置）和 test_case （单条用例），自动完成五件事：
+1. 拼装请求 ：URL、method、header、cookie、请求参数
+2. 参数替换 ：把 ${get_extract_data(...)} 这种动态占位符替换成实际值
+3. 发送请求 ：调用 SendRequest 拿到响应
+4. 提取数据 ：从响应里挖出后续接口要用的 token/订单号等
+5. 断言验证 ：按 validation 规则校验响应
+举个例子：以提交订单接口为例
+- baseInfo:
+    api_name: 提交订单
+    url: /coupApply/cms/placeAnOrder
+    method: post
+    header:
+      Content-Type: application/json;charset=UTF-8
+  testCase:
+    - case_name: 提交订单
+      json:
+        goods_id: ${get_extract_data(goodsId,0)}    # ← 动态参数
+        number: 2
+        price: '128'
+      validation:
+        - eq: { 'message': '提交订单成功' }
+        - eq: {'error_code':'0000'}
+      extract:
+        orderNumber: $.orderNumber
+        userId: $.userId
+
+入参：base_info = {'api_name': '提交订单', 'url': '/coupApply/cms/placeAnOrder', 'method': 'post', 'header': {...}}
+test_case = {'case_name': '提交订单', 'json': {'goods_id': '${get_extract_data(goodsId,0)}', ...}, 'validation': [...], 'extract': {...}}
+阶段 1 拼装请求 ：
+url_host = 'http://api.example.com'           # 从配置文件读
+url = 'http://api.example.com/coupApply/cms/placeAnOrder'
+method = 'post'
+header = {'Content-Type': 'application/json;charset=UTF-8'}
+阶段 2 处理 cookie（看是否需要）
+阶段 3：pop 出非请求参数 这一步是关键，把 test_case 字典里 不属于请求参数 的字段一个个移走：
+为什么要 pop？ 因为后面要把 test_case 整个 **test_case 解包传给请求函数，如果不移走， case_name 、 validation 、 extract 这些会被当成请求参数发出去，接口会报错。
+case_name = '提交订单'                         # test_case 移除 case_name
+validation = [{'eq': {'message': '提交订单成功'}}, {'eq': {'error_code': '0000'}}]  # 移除 validation
+extract = {'orderNumber': '$.orderNumber', 'userId': '$.userId'}   # 移除 extract
+
+# 此时 test_case 变成：
+test_case = {'json': {'goods_id': '${get_extract_data(goodsId,0)}', 'number': 2, 'price': '128'}}
+阶段 4 参数替换
+# 遍历 test_case，发现 'json' 在 params_type 里
+# replace_load 把 ${get_extract_data(goodsId,0)} 替换为 extract.yaml 里的实际值
+test_case['json'] = {'goods_id': 8899, 'number': 2, 'price': '128'}   # 假设 goodsId=8899
+阶段 5 发送请求
+res = self.run.run_main(name='提交订单', url='http://...', case_name='提交订单',
+                        header={...}, method='post', file=None, cookies=None,
+                        json={'goods_id': 8899, 'number': 2, 'price': '128'})  # **test_case 解包
+假设接口返回{"orderNumber": "ORD20260709001", "userId": 8888, "message": "提交订单成功", "error_code": "0000"}
+提取数据 （先于断言执行）：
+self.extract_data({'orderNumber': '$.orderNumber', 'userId': '$.userId'}, res.text)
+# 写入 extract.yaml:
+#   orderNumber: ORD20260709001
+#   userId: 8888
+断言校验 ：
+self.asserts.assert_result(
+    [{'eq': {'message': '提交订单成功'}}, {'eq': {'error_code': '0000'}}],
+    {'orderNumber': 'ORD20260709001', 'userId': 8888, 'message': '提交订单成功', 'error_code': '0000'},
+    200
+)
+# 校验 message == '提交订单成功' ✓
+# 校验 error_code == '0000' ✓
+# 测试通过
+
+3）mock_server文件夹
+这是一个 独立的 Flask 模拟接口服务器 ，专门给测试框架当「假后端」用，让测试用例不依赖真实业务系统也能跑通。
+flask_service.py 是一个 功能完整的 Flask 模拟后端服务 ，定义了用户管理、电商下单、订单调度、承运商管理、事故上报等 40+ 个接口，通过「写文件/读文件」模拟接口关联、「JWT 装饰器」模拟鉴权、「随机数生成」模拟真实业务数据，让测试框架不依赖真实后端就能跑通完整业务流程，是学习、调试、演示测试框架的利器。
+
+4）conftest.py
+这是 pytest 的 全局夹具文件 ，专门负责测试的「前置准备」和「后置清理」。pytest 会自动识别 conftest.py ，里面的 fixture 不用 import 就能在所有测试用例中使用。
+
+5）Pjenkins.py
+Jenkins 是一个 自动化调度服务器 ，它盯着代码仓库，一旦发现代码变更就自动拉代码、跑测试、生成报告，整个过程无人值守。项目里的 Pjenkins.py 则是通过 Jenkins API 读取测试结果，再通过钉钉/邮件推送给团队，实现「代码提交 → 自动测试 → 自动通知」的闭环。
+Pjenkins.py 是一个 Jenkins 结果读取器 ，通过 python-jenkins 库连接 Jenkins 服务器，调用 REST API 依次获取最新构建号 → 测试报告数据（通过/失败数）→ 控制台日志，再用正则从日志里提取 Allure 报告链接，最终汇总成一个字典返回，供钉钉/邮件通知模块使用。
+
+简历可以借鉴：
+### 项目名称
+基于 Python + pytest 的接口自动化测试框架 （含 Mock 服务）
+
+### 项目介绍
+Situation（项目背景） 随着业务系统接口数量增长（覆盖用户管理、电商下单、订单调度、承运商管理等 6 大业务模块、40+ 接口），手工回归测试耗时且易漏测，且部分接口依赖第三方服务（支付、短信）和未开发完成的后端，导致测试工作常被阻塞，亟需一套可独立运行、数据驱动、支持接口关联的自动化测试体系。
+
+Task（任务目标） 设计并实现一套接口自动化测试框架，要求：① 支持 YAML 数据驱动，测试数据与代码分离；② 解决接口间数据依赖（如登录态传递、订单号关联）；③ 不依赖真实后端也能跑通全流程；④ 支持多维度断言（响应/状态码/数据库）；⑤ 自动生成可视化测试报告并集成 CI/CD。
+
+Action（个人职责）
+
+1. 框架架构设计 ：采用分层设计（ base 核心层 / common 工具层 / conf 配置层 / testcase 用例层 / data 数据层），通过 run.py 统一入口调度 pytest 执行，实现配置、用例、数据、报告完全解耦。
+2. YAML 数据驱动引擎 ：封装 readyaml.py 解析器，将 YAML 用例转化为 pytest 参数化数据；实现 specification_yaml 核心调度方法，串联「参数替换 → 请求发送 → 数据提取 → 断言验证」完整链路，单条用例只需维护 YAML 文件，零代码。
+3. 接口关联机制 ：设计 extract_data / extract_data_list 双提取器，支持正则（ re.search / re.findall ）和 JSONPath 两种提取方式，将 token、订单号等关键数据写入 extract.yaml ，后续接口通过 ${get_extract_data()} 动态读取，解决接口依赖问题。
+4. 动态参数替换 ：在 debugtalk.py 中封装随机车牌、CSV 数据读取、时间戳生成等 40+ 工具函数，通过 ${function_name()} 占位符语法在 YAML 中调用，实现参数动态化。
+5. Mock 后端服务 ：基于 Flask 独立开发 mock_server （1790 行，40+ 接口），模拟登录、下单、支付、调度全流程，支持 JWT 鉴权、接口关联（文件读写传递订单号）、随机数据生成，使框架脱离真实后端独立运行。
+6. 多维度断言体系 ：在 assertions.py 中实现 5 种断言策略—— contains （模糊匹配）、 eq （精确匹配）、 ne （不等校验）、 rv （字段存在性）、 db （数据库校验），支持响应、状态码、DB 三层校验。
+7. 多数据库支持 ：封装 connection.py 统一连接器，支持 MySQL、Redis、MongoDB、ClickHouse 四种数据库，结合 data/sql/*.xml 管理 SQL 语句，实现接口操作后的数据一致性校验。
+8. 会话级夹具设计 ：在 conftest.py 中通过 @pytest.fixture(scope='session') 实现全局登录一次、token 全程复用，避免每条用例重复登录；预留数据库后置清理 fixture，支持测试脏数据回收。
+9. 报告与通知 ：集成 Allure 生成可视化 HTML 报告（含接口名、请求头、响应体、断言详情），同时输出 JUnit XML 供 Jenkins 解析；封装 钉钉机器人通知 和 邮件通知 ，测试结束自动推送结果。
+Result（项目成果）
+
+- 框架覆盖 6 大业务模块、40+ 接口，回归测试执行时间从人工 4 小时缩短至自动化 15 分钟，效率提升 94%；
+- 通过 YAML 数据驱动，新增接口用例只需维护 YAML 文件，用例编写效率提升 70%；
+- Mock 服务使框架在后端未就绪阶段即可并行开发测试，缩短测试启动周期约 2 周；
+- 通过接口关联机制 + 数据库双重校验，发现并定位 15+ 个接口一致性缺陷（如「下单成功但 DB 无记录」类问题）；
+- 框架已集成 Jenkins CI，每次代码提交自动触发测试并推送 Allure 报告到钉钉群，实现测试左移。
+### 技术栈
+Python pytest requests Allure Flask PyMySQL Redis MongoDB JSONPath YAML Jenkins CI/CD JWT
+
+## 简化版（如果简历空间有限）
+### 项目名称
+接口自动化测试框架（Python + pytest + Allure）
+
+### 项目介绍
+面向 6 大业务模块、40+ 接口的自动化测试框架，采用 YAML 数据驱动 + 分层架构设计，支持接口关联、多数据库校验、Mock 后端、Allure 可视化报告，已集成 Jenkins CI 实现测试左移。
+
+### 个人职责
+- 设计分层架构（base/common/conf/testcase/data），封装 specification_yaml 核心调度方法，串联参数替换→请求→提取→断言全链路；
+- 实现 extract/extract_list 双提取器，支持正则+JSONPath，解决接口间 token、订单号数据依赖；
+- 基于 Flask 开发 1790 行 Mock 服务（40+ 接口），支持 JWT 鉴权与接口关联，使框架脱离真实后端独立运行；
+- 封装 contains/eq/ne/rv/db 五种断言策略，支持响应、状态码、MySQL/Redis/MongoDB 数据库三层校验；
+- 通过 conftest.py session 级 fixture 实现全局登录一次、token 全程复用；
+- 集成 Allure 报告 + JUnit XML + 钉钉/邮件通知，对接 Jenkins CI 自动触发。
+### 项目成果
+回归测试效率提升 94%（4h→15min），用例编写效率提升 70%，发现 15+ 接口一致性缺陷，测试启动周期缩短 2 周。
+
+
+
+
+
+
+
+
+
+）
+
+
+
+
+
+
+
+
+

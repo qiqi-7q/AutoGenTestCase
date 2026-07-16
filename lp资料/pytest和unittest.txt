@@ -1,0 +1,215 @@
+一、什么是 unittest
+归属：Python 自带的单元测试工具，不用 pip install，装完 Python 就能直接用。
+对标：Java 的 JUnit，专门用来写自动化测试代码。
+作用：
+你写了函数 / 接口，手动运行测试很麻烦；unittest 可以一次性自动跑所有测试用例，自动判断结果对不对，报错会清晰提示哪里出问题。
+单元测试：只测试一小段代码（单个函数、单个方法），保证最小单元逻辑正确。
+二、unittest 4 个核心基础概念（简单理解）
+TestCase
+测试类模板，写测试代码必须继承 unittest.TestCase，自带判断结果、前置后置功能。
+测试用例：
+类里面，名字必须以 test 开头的函数，程序才会自动执行它。test_xxx 是规范写法。
+前置 / 后置函数（钩子函数）
+setUp()：每执行一条测试用例之前自动运行（初始化数据、打开连接）
+tearDown()：每执行一条测试用例结束后自动运行（清理数据、关闭连接）
+断言：判断结果是否符合预期，相当于 “判断对错”，错了程序直接抛出错误。
+三、常用断言（最实用，记这几个就够）
+python
+self.assertEqual(实际值, 预期值)   # 两者相等才正确
+self.assertNotEqual(a, b)        # 两者不相等才正确
+self.assertTrue(变量)             # 结果为True
+self.assertFalse(变量)            # 结果为False
+self.assertIn(元素, 列表/字符串)   # 包含某个内容
+四、完整入门示例 1：测试简单加法函数
+步骤 1：创建文件 test_demo.py
+python
+# 导入内置测试库
+import unittest
+
+# 自己写的业务函数（需要被测试的代码）
+def add_num(a, b):
+    return a + b
+
+# 1. 创建测试类，必须继承 unittest.TestCase
+class TestAddFunc(unittest.TestCase):
+
+    # 每条用例执行前都会执行
+    def setUp(self):
+        print("====开始执行一条测试用例====")
+
+    # 每条用例执行完都会执行
+    def tearDown(self):
+        print("====本条用例执行结束====\n")
+
+    # 测试用例：函数名必须test开头
+    def test_positive_add(self):
+        # 调用函数拿到实际结果
+        result = add_num(2, 3)
+        # 断言：预期结果是5，如果不等直接报错
+        self.assertEqual(result, 5)
+
+    def test_negative_add(self):
+        result = add_num(-1, 4)
+        self.assertEqual(result, 3)
+
+    def test_zero_add(self):
+        result = add_num(0, 0)
+        self.assertEqual(result, 0)
+
+# 程序入口，运行所有测试用例
+if __name__ == '__main__':
+    unittest.main()
+运行方式
+终端输入：
+bash
+python test_demo.py
+输出效果
+会依次执行 3 条测试，全部通过显示 OK；如果改写成错误预期值，程序会明确告诉你哪条用例失败。
+五、示例 2：模拟测试报错场景
+修改其中一行，制造错误：
+python
+def test_zero_add(self):
+    result = add_num(0, 0)
+    self.assertEqual(result, 1)  # 0+0=0≠1，测试失败
+运行后控制台会提示：断言错误，预期 1，实际 0，精准定位出错的用例。
+六、示例 3：测试列表、布尔判断
+python
+import unittest
+
+class TestListFunc(unittest.TestCase):
+    def test_list_contains(self):
+        arr = [10,20,30]
+        self.assertIn(20, arr)   # 判断列表包含20
+
+    def test_bool_true(self):
+        flag = 10 > 1
+        self.assertTrue(flag)
+
+if __name__ == '__main__':
+    unittest.main()
+七、小白必懂规则总结
+必须 import unittest；
+测试类 class Xxx(unittest.TestCase)，一定要继承；
+测试方法名称必须以 test_ 开头，否则不会自动运行；
+判断对错不能用普通 if，要用自带 self.assertXxx 断言；
+setUp / tearDown 每条用例都会执行一次，用于统一初始化、清理；
+文件末尾固定写 if __name__ == '__main__': unittest.main() 启动测试。
+
+##########################################################################################
+
+八、什么是 pytest
+归属：第三方测试框架，功能更强大、语法更简洁。
+安装：需要 pip 安装
+bash
+pip install pytest
+特点：
+- 兼容 unittest 写的测试用例
+- 写法更灵活，支持函数式和类式测试
+- 自动发现测试文件和测试用例
+- 插件生态丰富（如 pytest-html 生成报告）
+- 断言直接用 Python 原生 assert，更直观
+
+九、pytest 核心规则
+测试文件：
+- 文件名以 test_ 开头或以 _test.py 结尾
+- 如 test_demo.py 或 demo_test.py
+
+测试函数/方法：
+- 函数名以 test_ 开头
+- 类名以 Test 开头（类中方法以 test_ 开头）
+
+十、pytest 入门示例 1：测试简单加法函数
+创建文件 test_pytest_demo.py
+python
+# 被测试的函数
+def add_num(a, b):
+    return a + b
+
+# 测试函数：直接 def test_xxx 即可，无需继承类
+def test_positive_add():
+    result = add_num(2, 3)
+    assert result == 5  # 直接用 Python 原生 assert
+
+def test_negative_add():
+    result = add_num(-1, 4)
+    assert result == 3
+
+def test_zero_add():
+    result = add_num(0, 0)
+    assert result == 0
+
+运行方式
+bash
+pytest test_pytest_demo.py -v
+参数说明：
+- -v：详细模式，显示每条用例执行结果
+- -x：遇到失败立即停止
+- --tb=short：简化错误信息
+
+十一、pytest 示例 2：类式测试
+python
+class TestMath:
+    def test_add(self):
+        assert add_num(1, 2) == 3
+    
+    def test_multiply(self):
+        assert 2 * 3 == 6
+
+运行：pytest 会自动发现 Test 开头的类
+
+十二、pytest 前置后置（fixture）
+fixture 比 unittest 的 setUp/tearDown 更灵活
+python
+import pytest
+
+@pytest.fixture
+def setup_data():
+    print("\n====开始执行前置====")
+    data = {"name": "test", "value": 100}
+    yield data  # yield 之前是前置，之后是后置
+    print("====执行后置清理====")
+
+def test_using_fixture(setup_data):
+    print(f"使用 fixture 数据: {setup_data}")
+    assert setup_data["value"] == 100
+
+fixture 作用域：
+- @pytest.fixture(scope="function") ：函数级（默认）
+- @pytest.fixture(scope="class") ：类级
+- @pytest.fixture(scope="module") ：模块级
+- @pytest.fixture(scope="session") ：会话级
+
+十三、pytest 常用断言
+python
+assert a == b              # 相等
+assert a != b              # 不相等
+assert x in [1,2,3]        # 包含
+assert x not in list       # 不包含
+assert True                # 为真
+assert False               # 为假
+assert isinstance(obj, str) # 类型判断
+
+十四、pytest 生成测试报告
+安装插件
+bash
+pip install pytest-html
+生成 HTML 报告
+bash
+pytest test_demo.py --html=report.html
+
+十五、unittest vs pytest 对比
+| 特性 | unittest | pytest |
+|------|----------|--------|
+| 语法复杂度 | 较高，需继承类 | 简洁，函数/类都可 |
+| 断言方式 | self.assertXxx() | 原生 assert |
+| 发现机制 | 需手动加载 | 自动发现 |
+| 前置后置 | setUp/tearDown | fixture（更灵活） |
+| 插件支持 | 有限 | 丰富（报告、覆盖率等） |
+| 兼容性 | 官方标准 | 兼容 unittest |
+| 学习曲线 | 适中 | 更平缓 |
+
+十六、选择建议
+- 简单脚本、快速验证：用 pytest
+- 企业级项目、长期维护：pytest（推荐）
+- 已有 unittest 项目：可混用，pytest 兼容运行
+- 需要生成美观报告：pytest + pytest-html

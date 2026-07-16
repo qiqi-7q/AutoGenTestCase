@@ -1,0 +1,348 @@
+playwright 以及 selenium
+
+两者都是浏览器自动化工具：可以用代码操控浏览器打开网页、点击按钮、输入文字、爬取数据、做自动化测试、抢票、自动填表等。
+Selenium：老牌、生态大、配置麻烦、要装浏览器驱动；支持所有语言
+Playwright：微软 2020 年新出、开箱即用、自动管理浏览器、API 更简洁、稳定性更强
+
+########################################################################## playwright概念
+Playwright 是微软 2020 年发布的跨浏览器网页自动化工具，由原 Puppeteer 核心团队开发，专门解决 Selenium 驱动版本不匹配、页面异步加载报错、代码繁琐等痛点。
+一句话：用代码完全模拟真人操作浏览器，自动打开网页、点击、输入、爬数据、做 UI 自动化测试。
+UI 自动化测试：操作页面 + 断言校验，验证功能是否正常（企业测试主流用法）
+{
+1. 先搞懂：UI 是什么
+UI = User Interface 用户界面，就是你肉眼能看到的页面：
+网站页面按钮、输入框、弹窗、下拉菜单、表格、登录框…… 这些可视化界面全部叫 UI。
+2. UI 自动化测试是什么
+不用人工手动点点点，用代码（Playwright/Selenium）操控浏览器，自动模拟人操作页面，校验功能是否正常。
+3.
+Web 网页 UI 自动化：Playwright、Selenium、Cypress；
+移动端原生 App UI 自动化：Appium、Airtest；
+Windows 桌面软件 UI 自动化：pywinauto、SikuliX。
+}
+
+playwright优势：
+免驱动：安装命令自动下载完整浏览器，不用手动匹配 chromedriver，无版本报错；
+智能自动等待：点击、输入、获取元素前，自动等待元素加载、可交互，不需要大量 time.sleep()；
+Locator 定位器：动态实时查找元素，页面刷新后不会丢失对象，稳定性极强；
+原生网络能力：抓接口、拦截广告图片、Mock 后端返回数据；
+开箱即用功能：一键模拟手机设备、页面截图、全程录屏、自动生成测试代码；
+隔离上下文：一个浏览器开启多个无痕会话，多账号登录互不干扰；
+API 简洁：代码量比 Selenium 少一半。
+
+playwright codegen 是 Playwright 自带的脚本录制指令，在终端输入该命令并拼接目标网页地址后，程序会自动弹出浏览器窗口，你可以像平常上网一样手动完成访问页面、输入文字、点击按钮、选择下拉、跳转链接等全部操作，工具会实时记录你每一步交互行为并自动生成规范的自动化代码，默认输出 Python 同步代码，也可通过参数切换 JavaScript、Java 等语言，还支持指定手机设备模拟移动端操作、将生成代码直接保存到本地 py 文件，生成的代码会优先使用 get_by_role、get_by_label 这类稳定性更强的语义化定位器，自动封装浏览器启动、页面访问、元素操作整套逻辑，关闭录制浏览器后就能在控制台或本地文件拿到完整可直接运行的脚本，极大降低新手手写定位与操作代码的成本，后续只需自行补充断言、截图、网络拦截等测试专属逻辑即可完善 UI 自动化用例。
+
+##############################################两个例子
+例子1（以同步为例子）:
+# 导入同步playwright模块
+from playwright.sync_api import sync_playwright
+
+# with上下文管理器：自动创建、最后自动关闭浏览器，避免资源泄露
+with sync_playwright() as p:
+    # 1. 启动Chromium浏览器
+    # headless=False：弹出可视化浏览器窗口；True=不弹出浏览器窗口，浏览器在电脑后台悄悄运行
+    browser = p.chromium.launch(headless=False)
+
+    # 2. 创建独立无痕上下文（隔离登录、缓存）
+    context = browser.new_context()
+
+    # 3. 新建空白标签页
+    page = context.new_page()
+
+    # 4. 访问百度首页网址
+    page.goto("https://www.baidu.com")
+
+    # 打印当前页面标题
+    print("访问首页，页面标题：", page.title())
+
+    # 5. 定位搜索输入框，输入关键词
+    # get_by_label：根据输入框绑定的文字"搜索"定位，语义化最优写法
+    # .fill(文本) 清空输入框原有内容，再自动输入你传进去的文字，等价于人手动删除原有文字、打字输入。
+    page.get_by_label("搜索").fill("Playwright教程")
+
+    # 6. 点击【百度一下】按钮
+    # get_by_role() 是 Playwright 语义化定位器，优先推荐用，比 css/xpath 更稳定。
+    # "button"：告诉程序我要找页面里角色为按钮的元素（前端标签 <button>、带按钮属性的标签都会匹配）。
+    # .click 底层自动依次执行：
+    # 1.等待按钮渲染完成、DOM 存在；
+    # 2.等待按钮可见、不被弹窗 / 其他元素遮挡；
+    # 3.等待按钮不是灰色禁用状态；
+    # 4.模拟真人鼠标移动到按钮上，再左键单击；
+    # 5.自带重试机制，短暂加载延迟也不会直接报错。
+    page.get_by_role("button", name="百度一下").click()
+
+    # 7. 等待页面加载完成（网络空闲，所有接口请求结束）
+    page.wait_for_load_state("networkidle")
+
+    # ===================== UI测试核心：断言校验 =====================
+    # 断言1：页面标题必须包含搜索关键词，不包含则程序报错，代表功能异常
+    assert "Playwright教程" in page.title(), "标题未包含搜索词，搜索功能异常！"
+
+    # 断言2：页面必须可见包含关键词的搜索结果文本
+    result_locator = page.get_by_text("Playwright教程")  #去页面里匹配可见的文字，不会立刻去页面查找元素，后续调用方法时才实时查找
+    assert result_locator.is_visible(), "页面未展示对应搜索结果"
+    print("校验通过：页面正常展示搜索内容") #只有上面断言校验成功、没有报错时，这行打印才会执行。
+
+    # 8. 获取第一条搜索结果文字并打印
+    first_title = page.locator("#content_left h3").text_content()
+    print("第一条搜索结果标题：", first_title)
+
+    # 9. 页面截图保存到本地
+    page.screenshot(path="baidu_search_result.png")
+    print("截图已保存至当前文件夹")
+
+    # 强制等待5秒，方便观察页面效果
+    page.wait_for_timeout(5000)
+
+    # 10. 关闭浏览器，释放资源
+    browser.close()
+
+例子2:
+from playwright.sync_api import sync_playwright, expect
+
+with sync_playwright() as p:
+    browser = p.chromium.launch(headless=False)
+    page = browser.new_page()
+    page.goto("https://www.baidu.com")
+
+    # ========== 1、断言页面全局title（整页维度） ==========
+    page_title = page.title()
+    assert "百度" in page_title, "页面标题不匹配"
+    expect(page).to_have_title("百度一下，你就知道")
+
+    # ========== 2、断言页面元素Locator（单个组件维度） ==========
+    search_input = page.get_by_label("搜索")
+    assert search_input.is_visible(), "搜索框未显示"
+    expect(search_input).to_be_visible()
+
+    # 操作搜索
+    search_input.fill("playwright")
+    page.get_by_role("button", name="百度一下").click()
+    page.wait_for_load_state("networkidle")
+
+    # 再次断言新页面标题
+    assert "playwright" in page.title()
+    # 断言搜索结果元素存在
+    result = page.get_by_text("playwright")
+    assert result.is_visible()
+
+    page.wait_for_timeout(2000)
+    browser.close()
+
+##############################################方法大致了解一下
+分类 1：Playwright 顶层对象方法（程序入口）
+仅用于启动浏览器，无页面操作功能
+p.chromium.launch()：启动 Chromium 浏览器；
+p.firefox.launch()：启动 Firefox；
+p.webkit.launch()：启动 WebKit；
+p.devices["设备名"]：获取内置手机 / 平板设备配置（iPhone 13、Pixel 7 等）。
+分类 2：Browser 浏览器实例方法（控制整个浏览器程序）
+操作对象是整个浏览器窗口进程，属于浏览器动作
+browser.new_context()：创建隔离无痕上下文；
+browser.close()：关闭浏览器，释放全部进程资源；
+browser.version()：获取浏览器内核版本；
+browser.new_page()：快速创建页面（省略 context，简易脚本使用）。
+分类 3：BrowserContext 上下文方法（隔离会话、全局配置）
+控制无痕环境、设备、Cookie、全局拦截、录制追踪
+context.new_page()：创建独立标签页；
+context.add_cookies(cookies)：写入 Cookie，实现免登录；
+context.clear_cookies()：清空登录缓存；
+context.set_viewport_size(width, height)：统一设置窗口分辨率；
+context.tracing.start() / tracing.stop()：开启 / 关闭全过程追踪，生成调试日志；
+context.close()：关闭当前无痕会话。
+分类 4：Page 页面对象方法（浏览器导航 + 浏览器内容全局操作）
+4.1 浏览器导航类（页面跳转、历史记录）
+page.goto(url, wait_until="networkidle")：访问目标网址，可配置页面加载等待规则；
+page.reload()：刷新当前页面；
+page.go_back()：返回上一页；
+page.go_forward()：前进下一页；
+page.wait_for_url(url)：等待页面跳转到指定地址。
+4.2 页面全局加载等待（浏览器内容管控）
+page.wait_for_load_state(state)：等待页面加载完成，state 可选 domcontentloaded /load/networkidle；
+page.wait_for_timeout(ms)：强制固定延时（调试用，正式项目少用）。
+4.3 页面全局信息获取（读取浏览器内容）
+page.title()：获取网页标题；
+page.url()：获取当前页面地址；
+page.content()：获取页面完整 HTML 源码；
+page.screenshot(path="xxx.png")：页面全屏截图；
+page.pdf()：页面导出 PDF 文件；
+page.evaluate(js代码)：在浏览器执行原生 JS，获取页面全局数据。
+4.4 网络拦截与监听（管控页面网络资源）
+page.route(匹配规则, 拦截函数)：拦截图片、接口、字体资源，可放行 / 阻断 / 自定义返回 Mock 数据；
+page.on("request", 回调)：监听页面所有发出的网络请求；
+page.on("response", 回调)：监听接口返回结果，抓取后端 JSON 数据。
+4.5 弹窗、新页面处理
+page.on("dialog", 回调)：捕获 alert、confirm 弹窗，自动确认 / 取消；
+page.wait_for_popup()：等待点击后打开新标签页。
+4.6 页面元素定位方法（页面元素，仅查找，无交互）
+全部返回 Locator 对象，只负责找到页面组件：
+page.get_by_role()：语义化定位，匹配按钮、输入框、下拉框等组件角色；
+page.get_by_label()：根据输入框绑定的 label 文字定位输入框；
+page.get_by_text()：根据页面可见文本匹配元素；
+page.get_by_placeholder()：根据输入框提示文字定位；
+page.get_by_alt_text()：通过图片 alt 文字定位图片；
+page.get_by_test_id()：通过前端自定义测试标记定位；
+page.locator(selector)：通用定位，支持 CSS 选择器、XPath。
+分类 5：Locator 定位器方法（页面动作：元素交互操作）
+先用定位方法拿到 Locator，再调用以下交互方法模拟人操作页面组件：
+5.1 点击、悬浮、勾选类
+.click()：单击元素，自动等待可点击、无遮挡；
+.dblclick()：双击；
+.hover()：鼠标悬浮；
+.check()：勾选复选框 / 单选框；
+.uncheck()：取消勾选；
+.set_checked(bool)：统一设置勾选状态。
+5.2 输入文本类（输入框专用）
+.fill("文本")：清空输入框原有内容，填入文字（推荐）；
+.type("文本")：逐字符慢速输入，不清空原有内容，模拟手动打字；
+.press("Enter")：模拟键盘按键（回车、删除、Tab 等）。
+5.3 文件、下拉选择
+.set_input_files([本地文件路径])：上传文件；
+.select_option(["选项值"])：下拉框选择指定选项。
+5.4 页面滚动、显示控制
+.scroll_into_view()：滚动页面，让元素出现在可视区域；
+.focus()：光标聚焦输入框。
+5.5 文本、属性取值（用于后续断言）
+.text_content()：获取元素内部全部纯文本；
+.inner_text()：仅获取页面可见文字；
+.get_attribute("属性名")：获取元素属性值（id、class、href 等）。
+分类 6：断言相关（UI 自动化核心校验逻辑）
+Playwright 分两种断言方式：Python 原生 assert + Playwright 内置 expect 断言（pytest 配套专用）
+6.1 原生搭配 Locator 的判断方法（配合 assert 使用）
+.is_visible()：判断元素是否页面可见；
+.is_hidden()：判断元素隐藏；
+.is_enabled()：判断按钮 / 输入框未禁用；
+.is_checked()：判断复选框已勾选；
+.is_editable()：判断输入框可编辑；
+.wait_for(state="visible/hidden/enabled")：等待元素达到指定状态。
+6.2 内置 expect 断言（测试框架专用，自动等待，报错信息更详细）
+python
+from playwright.sync_api import expect
+# 示例
+expect(locator).to_be_visible()
+expect(locator).to_have_text("预期文字")
+expect(page).to_have_title("预期标题")
+常用 expect 断言：
+to_be_visible() 元素可见
+to_have_text() 匹配完整文本
+to_contain_text() 包含部分文本
+to_be_enabled() 按钮可用
+to_have_url() 匹配页面地址
+
+
+########################################################################## selenium概念
+Selenium 是一款诞生于 2004 年、全球最早普及的跨浏览器网页自动化开源工具，核心用途分两大块：Web 网页UI 自动化功能测试、动态网页爬虫，行业里绝大多数传统软件测试团队都长期使用它。它可以通过代码操控 Chrome、Edge、Firefox、Safari、IE 等几乎所有主流浏览器，完整模拟人类上网的全部行为：打开网址、输入内容、点击按钮、切换页面、提取页面文字、处理弹窗、填写表单等。
+
+Selenium 采用「三层中转」运行机制：编程语言代码 → WebDriver 驱动程序 → 浏览器。每一款独立浏览器都必须配套专属驱动文件：Chrome 对应 chromedriver、火狐对应 geckodriver、Edge 对应 msedgedriver。代码不能直接和浏览器通信，全部指令要经过驱动中转；浏览器版本和驱动版本必须严格一一匹配，浏览器自动升级后驱动不更新就会直接报错启动失败，这也是 Selenium 最麻烦的短板。
+
+四大核心组件
+## Selenium IDE：浏览器插件录制工具，手动操作页面自动生成基础脚本，仅适合简单演示，企业项目几乎不用；
+Selenium WebDriver：最核心组件，日常写自动化脚本全部依赖它，提供定位元素、页面操作、窗口切换的全套 API；
+Selenium Grid：分布式测试工具，一台主机同时调度多台电脑、多浏览器批量执行测试用例，用于大型项目兼容性回归测试；
+## Selenium RC：老旧淘汰版本，现已完全废弃，无需学习。
+
+驱动解决方案:搭配 webdriver-manager 库自动识别浏览器、自动下载匹配驱动 pip install webdriver-manager
+
+##优点
+历史悠久，积累海量教程、报错解决方案，遇到任何问题网上都能找到参考；
+兼容极老浏览器（IE），老旧政企系统、传统后台项目只能用 Selenium 适配；
+生态完善，可无缝搭配 pytest 测试框架、Allure 测试报告、Jenkins 流水线，企业成熟测试体系全部适配；
+岗位需求量大，传统制造业、金融、政务软件测试岗位面试必考 Selenium。
+##缺点（对比 Playwright 差距明显）
+必须依赖浏览器驱动，版本匹配问题频繁出现，环境配置繁琐；
+无内置智能等待，页面异步加载（Vue/React 页面）极易出现元素找不到报错，必须手动编写强制 sleep 或显式等待代码，代码冗余；
+没有原生网络拦截、接口监听能力，抓请求、屏蔽图片需要额外第三方插件；
+模拟手机、平板设备、修改请求头需要大量冗余配置代码；
+处理 iframe 内嵌页面、新标签页、弹窗需要手动切换句柄，逻辑复杂；
+无自带录屏、代码录制、追踪调试工具，配套功能都需要额外拓展开发。
+
+适合使用 Selenium 的场景
+传统老项目、政企老旧后台系统、需要兼容 IE 浏览器的网页；
+传统软件测试岗位，企业使用 pytest+Selenium 搭建成熟自动化回归体系；
+需要大量参考解决方案、低成本学习入门自动化逻辑。
+不推荐优先使用的场景
+Vue、React 等现代前后端分离动态网站，频繁出现元素加载超时；
+爬虫项目，需要拦截接口、屏蔽图片、模拟移动端；
+个人自动化脚本、轻量化定时采集任务；
+新项目从零搭建 UI 自动化测试，优先选择 Playwright
+
+############################################## Selenium 核心对象与常用方法分类
+1. WebDriver 浏览器驱动对象（浏览器动作）
+负责启动、关闭浏览器，管理浏览器全局行为
+webdriver.Chrome ()：启动 Chrome 浏览器
+driver.quit ()：关闭浏览器并释放全部进程
+driver.close ()：仅关闭当前标签页
+driver.maximize_window ()：窗口最大化
+driver.set_window_size (宽，高)：自定义窗口尺寸
+2. 页面导航方法（浏览器导航）
+控制页面跳转、刷新、历史记录切换
+driver.get ("url")：访问指定网页地址
+driver.refresh ()：刷新页面
+driver.back ()：返回上一页
+driver.forward ()：前进下一页
+driver.current_url：获取当前页面网址
+driver.title：获取网页标题
+3. 页面元素定位方法（页面元素，仅查找无交互）
+通过多种规则找到页面按钮、输入框等元素，提供 6 种基础定位方式
+driver.find_element (By.ID, "id 值")：通过元素 id 定位（速度最优）
+find_element (By.NAME, "name 属性")：匹配 name 属性
+find_element (By.CLASS_NAME, "类名")：匹配 class 样式类
+find_element (By.TAG_NAME, "标签")：匹配 html 标签如 div、input
+find_element (By.XPATH, "xpath 表达式")：万能路径定位，复杂页面常用
+find_element (By.CSS_SELECTOR, "css 选择器")：样式选择器定位
+4. 元素交互方法（页面动作，模拟人为操作）
+定位到元素后执行点击、输入等操作
+element.send_keys ("文本")：向输入框输入文字，不会自动清空原有内容
+element.click ()：单击按钮、链接
+element.clear ()：清空输入框内容
+element.text：获取元素内文字
+element.get_attribute ("属性名")：获取元素属性值
+element.is_displayed ()：判断元素是否可见
+5. 等待机制（Selenium 必备，弥补无自动等待缺陷）
+强制等待 time.sleep (秒)：固定时长等待，浪费资源，仅调试临时使用；
+隐式等待 driver.implicitly_wait (10)：全局设置最长等待时间，仅等待 DOM 加载完成，不等待接口数据；
+显式等待 WebDriverWait + expected_conditions：精准等待指定元素出现、可点击，正式项目标准写法。
+6. 断言校验（UI 自动化核心）
+依托获取到的页面标题、元素文本、元素可见状态，搭配 Python 原生 assert 完成校验，无内置专用断言库，全部手动判断：
+python
+assert "百度" in driver.title, "页面标题错误"
+assert search_btn.is_displayed(), "搜索按钮未展示"
+
+############################################## 例子
+from selenium import webdriver
+from selenium.webdriver.chrome.service import Service
+from selenium.webdriver.common.by import By
+from selenium.webdriver.common.keys import Keys
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+from webdriver_manager.chrome import ChromeDriverManager
+
+# 启动浏览器，自动匹配驱动
+driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()))
+try:
+    # 访问百度
+    driver.get("https://www.baidu.com")
+    # 显式等待搜索框加载完成，最长等待10秒
+    wait = WebDriverWait(driver, 10)
+    search_input = wait.until(EC.element_to_be_clickable((By.ID, "kw")))
+    # 清空输入框并输入内容
+    search_input.clear()
+    search_input.send_keys("Selenium介绍")
+    # 回车搜索
+    search_input.send_keys(Keys.ENTER)
+
+    # 断言页面标题包含关键词
+    assert "Selenium介绍" in driver.title
+
+    # 获取第一条结果文字并打印
+    first_title = driver.find_element(By.XPATH, '//div[@id="1"]//h3').text
+    print("第一条搜索结果：", first_title)
+finally:
+    # 关闭浏览器释放资源
+    driver.quit()
+
+"""
+Selenium 必须手动写显式等待WebDriverWait，否则极易元素找不到；Playwright 所有操作自带自动等待；
+Selenium 输入需要clear()+send_keys()两步，Playwright 一步.fill()；
+Selenium 需要额外安装驱动管理库，Playwright 内置浏览器无需驱动；
+Selenium 定位后需要单独写等待，Playwright Locator 天然动态实时查找元素。
+"""

@@ -1,0 +1,291 @@
+5.28 
+入职，封装好的代码，完整的工作流代码（但不需要）
+借助封装好的client.py代码，编写根据数据集编号setid以及数据包编号bagid查询在数据集下数据包所有数据的脚本"D:\code_all\test_teacher.py"（这是根据商哥脚本的思路改的）
+5.29
+学习了一下client.py，client.py 是一个封装了后端 HTTP 接口的 Python 客户端工具类，它把所有后端 API 包装成简单易用的函数，不用手写请求、拼接参数，直接调用函数就能完成数据查询、创建、标签管理等操作。
+
+"D:\code_all\get_link_via_vin.py"  
+该脚本通过 创建APIClient 实例，调用 list_bags方法，再传入对应的参数以及时间范围来获取所有的bag信息以及对应的链接 。核心流程：
+1. 初始化 API 客户端 ：使用 base_url 和 token 创建 APIClient 实例
+2. 构建时间过滤条件 ：将传入的日期字符串（如 "2026-05-14 00:00:00" ）转换为微秒级时间戳，构造 filter_params 字典
+3. 分页遍历 bag 数据 ：通过 while True 循环调用 list_bags 方法，每次获取 1000 条记录，直到遍历完全部数据
+4. VIN 匹配 ：遍历每个 bag，将其 vin 与目标 VIN 进行匹配
+5. 收集结果 ：将匹配的 bag 信息（bagId、vin、startTime、endTime、link）存入结果列表返回
+6. 输出结果 ：在主程序中调用函数并格式化打印所有匹配的链接和 bag 信息
+
+6.1
+了解pytest框架   D:\code_all\test_yongli\test_get_vehicle_info.py
+Pytest 是 Python 官方的单元测试框架，用于自动化执行测试代码。它通过扫描指定目录下的文件，自动识别符合命名规范的测试函数并执行，最后收集所有断言结果生成测试报告。相比 Python 内置的 unittest ，Pytest 更加轻量、简洁，断言失败时能自动显示详细的对比信息。
+Pytest 有一个强大的自动发现规则，它会递归遍历目录，找到所有符合命名模式的文件、类和函数。文件名必须以 test_ 开头或以 _test.py 结尾；类名必须以大写 Test 开头（但不能是 Test__init__ ）；函数名必须以 test_ 开头。只要遵循这些命名约定，Pytest 就能自动收集并执行这些测试，无需额外配置。
+每个测试方法执行前后，可能需要初始化一些资源或清理环境。Pytest 提供了 setup_method 和 teardown_method 来处理这个需求。前者会在每个测试方法之前执行，后者会在每个测试方法之后执行。在你的代码中， setup_method 用于创建 APIClient 实例， teardown_method 用于重置 token，这样可以确保每个测试都独立运行，互不影响。
+参数化测试：参数化允许你用一组不同的参数多次执行同一个测试函数。通过 @pytest.mark.parametrize 装饰器，你可以定义多组参数，Pytest 会为每一组参数生成一个独立的测试用例。例如 @pytest.mark.parametrize("vehicle_id", [1000, 1001]) 会让这个测试函数执行两次，一次用 1000，一次用 1001，这样就不需要写两个重复的测试函数了。
+有时候某些测试暂时无法执行，比如功能未开发完成、需要特定环境、或者已知存在问题。 @pytest.mark.skip 装饰器可以跳过这个测试，并在输出中显示跳过原因。如果想根据条件跳过，比如判断 Python 版本或某个配置项是否满足，可以使用 @pytest.mark.skipif ，只有条件为 False 时才跳过测试。
+Pytest 提供了丰富的命令行选项来控制测试执行方式。 -v 会显示每个测试的名称和结果，方便查看详细输出； -s 会显示测试中的 print 输出； -x 会在遇到第一个失败时停止运行； -k 可以按名称筛选测试，比如 -k "valid" 会只运行名称包含 "valid" 的测试； --tb=short 会简化错误回溯信息，让失败原因更易读。
+Pytest 使用 Python 原生的 assert 语句进行断言，而不是像 unittest 那样提供一堆 assertEqual 、 assertTrue 等方法。好处是代码更简洁，而且当断言失败时，Pytest 会自动分析比较的两边，分别显示实际值和期望值，帮助快速定位问题。比如 assert result == expected 失败时，会清晰显示两边各自的值。
+
+准备协助前后端开发平台（自动化管理平台业务）
+
+6.2
+获取前后端代码，协助开发   后端启动 uvicorn app.main:app --reload
+mysql   win+r 输入services.msc  找MySQL80，点击启动 或者  net start MySQL80
+redis  管理员 CMD 进入目录cd D:\redis   启动  redis-server.exe redis.conf   配置完环境变量之后，cmd 里运行 redis-server 就行      redis-cli ping 查看redis是否在运行
+在 FastAPI 中，models.py 是通过 SQLAlchemy 定义的 Python 类，核心作用是用 Python 代码替代 SQL 语句定义数据库表结构，数据库没有表时会自动创建表，有表时可直接通过 Python 对象完成增删改查操作，无需编写原生 SQL，同时能便捷实现表与表之间的关联，让数据库操作更简洁安全。
+示例：定义车辆表模型 class Vehicle(Base): __tablename__ = "vehicles"; id = Column(Integer, primary_key=True); vehicle_code = Column(String(50))，程序会自动在数据库生成 vehicles 表；新增数据直接用 car = Vehicle(vehicle_code="C001")，查询数据用 db.query(Vehicle).all()，全程无需写 CREATE TABLE、INSERT、SELECT 等 SQL 语句。
+plugin.py是 FastAPI 项目里模块化插件的注册类，核心作用是将车辆管理功能封装成独立插件，程序启动时自动完成数据库表创建与接口路由注册，让功能模块化、可插拔、无需手动配置。
+示例：代码运行后会自动根据 models 里的车辆、借用记录模型在 MySQL 生成 vehicles 和 borrow_records 表，同时把车辆管理、借用记录的接口注册到项目，可直接访问 /api/vehicle、/api/borrow 等接口，实现一键加载完整功能模块。
+
+6.3
+继续学习后端源码
+backend\app\core\database.py  这里的代码是 FastAPI 项目的数据库核心配置文件，通过 create_engine 创建数据库引擎建立 MySQL 连接，使用 sessionmaker 创建会话工厂 SessionLocal 用于生成数据库操作会话，通过 declarative_base() 定义模型基类 Base 以支持自动创建数据表，并提供 get_db() 函数获取安全的数据库连接，保证每次请求都能稳定操作数据且用完自动关闭，是项目所有数据库操作的基础核心。数据库引擎负责建立并管理项目与 MySQL 的总连接，是数据库交互的基础通道；会话工厂 SessionLocal 用于生成独立的数据库操作会话，每个接口请求都会创建一个临时会话来执行增删改查；get_db() 函数提供安全的会话获取方式，操作完成后自动关闭，三者配合实现稳定、安全的数据库操作。
+
+backend\app\core\config.py 是 FastAPI 项目的全局统一配置文件，通过 Settings 类集中管理 MySQL、Redis、JWT 登录、数据库连接池等所有核心配置信息，程序通过 settings 实例统一读取这些配置，不用在代码里到处写账号密码，方便修改、维护和安全管理，是项目连接数据库、实现登录验证、控制服务连接的统一配置中心。
+
+backend\app\plugins\vehicle_plugin\schemas.py 这段代码是 FastAPI 项目中基于 Pydantic 定义的数据校验与接口格式模型，先通过 VehicleBase、BorrowRecordBase 定义车辆和借用记录的基础公共字段、格式与校验规则，再通过继承实现各类专用模型：其他比如增删改查可以继承基础类并且添加一些其他字段，并通过配置 from_attributes = True 让模型自动将数据库查询出的 ORM 对象转换为 JSON 格式，全程自动校验字段类型、长度与必填项，让前后端数据交互更规范、安全、统一。
+models.py 是数据库模型，用于定义 MySQL 表结构、自动建表和执行数据库增删改查；而 Pydantic 的 schema 是接口数据模型，用于校验前端传入的数据、规范接口返回格式，并通过 from_attributes = True 将数据库数据转为 JSON 返回，前者负责数据库交互，后者负责前后端数据交互，两者分工不同、各司其职。
+
+backend\app\plugins\vehicle_plugin\router.py 这段代码是 FastAPI 项目中的车辆管理与借用记录接口路由文件，通过 APIRouter 分别创建 /vehicles 和 /borrows 两组接口，实现车辆的查询、新增、修改、删除、统计以及借用记录的创建、查询、归还、取消、统计功能，接口统一依赖数据库连接 get_db、使用 schemas 做数据校验、调用 services 执行业务逻辑，是前端与后端交互的入口层，负责接收请求、参数校验、响应数据。
+
+backend\app\plugins\vehicle_plugin\services.py 这段代码是 FastAPI 项目的业务逻辑服务层，通过 VehicleService 和 BorrowService 两个类，统一封装车辆的查询、创建、修改、删除以及车辆借用的申请、归还、取消、校验等所有核心业务逻辑，负责处理数据校验、数据库操作、状态同步、异常抛出，让接口层只负责接收请求和返回数据，实现业务与接口分离，让代码更清晰、易维护、可复用。
+def create_borrow_record(db: Session, borrow: schemas.BorrowRecordCreate) -> models.BorrowRecord:   
+schemas.BorrowRecordCreate 是 Pydantic 模型（前端 / 接口层），专门负责接收、校验前端传来的数据；models.BorrowRecord 是 ORM 数据库模型（数据库层），专门负责和 MySQL 交互、存表、取表数据；函数的作用就是把前端传过来的 Pydantic 数据，转换成 ORM 对象存入数据库，并返回 ORM 对象给接口，Pydantic 负责前后端数据交互，ORM 负责数据库读写，两者分工协作完成借车记录的创建流程。
+函数接收的是：前端传来的 Pydantic 数据（schemas），函数返回的是：数据库 ORM 对象（models），但最终接口会自动把 ORM 转成 Pydantic的json格式 再返回给前端
+
+models.py是 ORM 数据库模型，负责映射数据表、管控后端与 MySQL 的数据存储交互；schemas.py是 Pydantic 数据模型，负责前后端对接，校验前端入参、规范接口返回 JSON 格式；router.py是接口路由层，接收前端 HTTP 请求、接收前端参数，调用 services 业务方法，依靠response_model自动把数据库 ORM 对象转为 Pydantic 结构再返回前端 JSON；services.py是业务逻辑层，接收路由传入的参数与数据库会话，调用 models 完成数据库增删改查、业务规则校验，查询 / 操作后返回 ORM 对象给路由；plugin.py用于插件注册、汇总挂载路由到项目；__init__.py标记当前目录为 Python 包，实现模块导入；副本文件为历史备份不参与项目运行。
+
+分配任务完成后端接口开发 test_task_plugin@钱琦    test_miles@钱琦    employee_plugin@钱琦
+
+6.4
+继续实现功能test_task_plugin、test_miles、employee_plugin     netstat -ano | findstr :8000查找端口的pid   taskkill /F /PID 23540 杀死进程
+
+学习git上传到github   例如上传backend/app/plugins/employee_plugin   到  github
+
+1）进入项目目录  cd D:\Project_code
+2）克隆公司远程仓库到本地   git clone https://github.com/1129420023/LPATMP.git
+3）进入项目目录   cd LPATMP   
+4）将 employee_plugin 复制到仓库中  xcopy /E /I "D:\Project_code\backend\app\plugins\employee_plugin" "backend\app\plugins\employee_plugin"
+5）查看更改git status
+6）添加文件到暂存区  git add backend\app\plugins\employee_plugin
+7）提交（附说明）  git commit -m "Add employee_plugin with models, schemas, services, router, plugin"
+8）git push 
+
+测试：
+1.test_task_plugin 里 get "/" 不同参数传递，是否正确得到返回值列表
+2.测试完成率应该是实际里程除以目标，如果大于100，按照100计算目标  后端搞
+
+6.5 学一下git
+git
+# ========== 1. 初始化仓库 ==========
+cd D:\Project_code\你的项目名
+git init    给这个文件夹装上 Git 管理功能
+git config --global user.name "你的 GitHub 用户名"
+git config --global user.email "你的 GitHub 邮箱"
+
+# ========== 2. 添加并提交文件 ==========
+git add .   把所有文件交给 Git 管理，Git帮我盯着文件夹里所有文件
+git commit -m "初始化项目"   提交保存一个版本
+
+# ========== 3. 关联远程仓库 ==========
+git remote add origin https://github.com/你的用户名/你的仓库名.git 把电脑项目和GitHub网上仓库连起来 git remote -v看是否成功
+
+# ========== 4. 推送到远程 ==========
+git push -u origin main   把电脑代码上传到 GitHub
+######################################
+日常开发流程（已有仓库）
+# 1. 进入项目目录
+cd D:\Project_code\你的项目名
+
+# 2. 拉取远程最新代码（每次开发前先更新）
+git pull origin main     
+
+# 3. 修改代码后，查看状态
+git status
+
+# 4. 添加修改
+git add .    把改动的文件交给 Git
+
+# 5. 提交
+git commit -m "修复了某个bug / 添加了某个功能"
+
+# 6. 推送
+git push origin main
+
+6.8周一    继续修改test_task_plugin@钱琦    test_miles@钱琦    employee_plugin@钱琦
+1）employee_plugin插件字段有  姓名、对接工程师、第三方公司、联系方式、备注 ，索引有  id，name，third_party_company
+name 模糊查询    third_party_company 模糊查询
+2）test_task_plugin插件字段有 项目、测试版本、测试时间、测试车辆VIN、测试功能、任务描述、测试里程、任务发布人、测试人员、实际完成里程、任务达成率、任务状态、原因说明、备注  
+索引有 project、test_time、vin_code、test_function、task_publisher、test_person、task_status
+project 精确查询    test_time 范围查询    test_function 模糊查询    task_publisher 精确查询    test_person 精确查询    task_status 精确查询    id 精确查询
+3）test_miles_plugin插件字段有test_miles_plugin 插件字段有：项目、测试版本、测试时间、测试车辆 VIN、测试功能、里程、是否用于 KPI 统计、备注  ，  索引有：id、project、test_time、vin_code
+project 精确查询    test_version 模糊查询    test_time 范围查询    test_function 模糊查询    id 精确查询
+
+
+
+1）backend/app/core/database.py   删除同步相关的代码，只保留了异步代码
+2）backend/app/plugins/employee_plugin   backend/app/plugins/test_miles_plugin   backend/app/plugins/test_task_plugin    三个文件夹里面修改plugin.py- 导入改为 async_engine 、 register 方法改为 async def  、 使用异步方式创建表
+3）backend/app/core/plugin_manager.py
+- register_plugin 方法改为 async def
+- 添加异步方法检测，支持同步和异步插件
+4）backend/app/main.py
+- 导入改为 async_engine
+- 插件注册移到 lifespan 中
+- 使用 await 异步注册插件
+5）根据task_id修改task表的数据，会根据其中的project，test_time，vin码对应mile表里面的对应数据，进行修改，删除同理，增加task-》增加mile，反之不成立，mile数据不会影响task数据。
+
+遇到的问题：异步数据库（async SQLAlchemy）有一个死规矩：
+👉 执行完 await db.commit () 之后，你绝对不能再碰 db_task.xxx 这个对象！
+👉 一碰，就会触发数据库偷偷查询 → 直接报错 MissingGreenlet
+错误：
+async def create_test_task(db: AsyncSession, task: schemas.TestTaskCreate):
+    # 1. 创建任务
+    db_task = models.TestTask(**task.dict())
+    db.add(db_task)
+
+    # 2. 提交数据库
+    await db.commit()  
+
+    # 3. 提交后，还去访问 db_task 的属性 → 报错！
+    return schemas.TestTask(
+        id=db_task.id,            # 报错！
+        project=db_task.project,  # 报错！
+        created_at=db_task.created_at  # 报错！
+    )
+
+正确：
+# 正确！！！
+async def create_test_task(db: AsyncSession, task: schemas.TestTaskCreate):
+    # 1. 创建任务
+    db_task = models.TestTask(**task.dict())
+    db.add(db_task)
+
+    # 2. flush 拿到 ID（不提交）
+    await db.flush()
+    task_id = db_task.id
+
+    # 🔥 关键：所有数据全部提前拿好，不用 db_task
+    return_data = {
+        "id": task_id,
+        "project": task.project,   # 用前端传过来的数据！
+        "test_time": task.test_time,
+        "vin_code": task.vin_code,
+        "created_at": datetime.now()
+    }
+
+    # 3. 提交数据库
+    await db.commit()
+
+    # 4. 直接返回提前准备好的数据
+    return schemas.TestTask(**return_data)
+在异步 SQLAlchemy 环境中，执行await db.commit()后 ORM 实体对象会被标记为过期，直接访问对象属性会触发隐式数据库查询，进而抛出MissingGreenlet错误；因此本方案的解决思路为：在执行事务提交前提前提取所需数据，不再依赖提交后的实体对象，优先使用接口入参构造返回结果与同步数据，全程规避提交后读取过期对象的行为，以此彻底兼容异步数据库的运行规则，避免报错。
+
+启动fastapi    uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload
+
+git使用最终版，新建一个文件夹拉取代码，然后把修改的文件复制进去，再推送
+1.
+cd D:/project    git config --global http.sslVerify false      git config --global credential.helper wincred
+git clone -b backend_dev http://gitlab-esd.leapmotor.com/TEST/IOV_TEST/Adas_Vehicle_Test/lpATMP.git 克隆代码
+2.
+cd lpATMP   
+把你本地原有代码路径：
+D:\Project_code\backend\app\plugins\employee_plugin
+D:\Project_code\backend\app\plugins\test_miles_plugin
+D:\Project_code\backend\app\plugins\test_task_plugin
+全部复制粘贴到 D:\project\lpATMP\backend\app\plugins\ 文件夹内。
+3.
+# 仅添加三个插件文件夹
+git add backend/app/plugins/employee_plugin backend/app/plugins/test_miles_plugin backend/app/plugins/test_task_plugin
+# 提交备注
+git commit -m "feat: 新增员工、里程、测试任务三大插件模块"
+# 推送到远程backend_dev分支
+git push origin backend_dev
+
+如果我已经在一个文件夹里面就有远程代码的修改后的版本，我该怎么推送：
+1.cd D:\project\lpATMP
+先把修改 提交本地
+2.git add .  添加所有你修改的文件
+3.git commit -m "本地修改完成，提交最新版本"
+拉取远程最新代码合并
+4.git pull origin backend_dev
+解决冲突后，自动生成合并提交，最后推送
+5.git push origin backend_dev      推送到公司 GitLab 的 backend_dev 分支
+
+6.10
+uvicorn app.main:app --host 10.192.200.142 --port 8000 --reload 
+
+6.16 修改完代码 上传仓库，接下来是项目计划插件
+只返回 整车发测、电子内部发测相关数据
+1.返回这两个所有数据，按照整车发测时间排序
+2.返回近3个月数据，按照整车发测时间排序
+3.刷新接口，可以重新读取数据
+
+6.18 record 自动定时刷新链接任务、发邮箱
+
+6.22  对接方本地发起接口调用时，先自行生成毫秒级 Unix 时间戳 X-Timestamp 与随机字符串 X-Nonce，再收集接口路径变量、URL 查询参数两类业务参数，连同转换更名后的 timestamp、nonce 以及平台分配的专属 appSecret 全部纳入签名计算范围，接着按照文档规则统一处理各类参数值：数字、布尔转为字符串，数组用逗号拼接，对象 / JSON 解析后按键排序输出紧凑字符串，空值统一转为空文本，完成值标准化后将所有参数按键名字母升序排列，以key=value#格式拼接成一整条原始字符串，使用 UTF-8 编码后做 SHA-256 哈希运算，再转换为 64 位小写十六进制字符串作为 X-Signature，最后把 X-App-Id、X-Timestamp、X-Nonce、X-Signature 一并放入请求头，带上业务参数发送至零云平台；平台收到请求后，首先通过请求头里的 X-App-Id 匹配后台存储的、与对接方完全一致的 appSecret，提取本次请求完整的路径参数、查询参数、时间戳、随机数，严格复刻对接方整套参数转换、字典排序、# 拼接、SHA256 加密、小写 HEX 编码的计算规则，独立重新算出一份全新签名，同时校验时间戳是否在 5 分钟有效区间内，最后将平台本地算出的签名与请求头携带的 X-Signature 逐字符比对，两者完全匹配且时间校验通过才会正常执行接口查询、返回车辆业务数据，签名不一致或时间超出有效期则直接返回 200401 验签失败错误，拦截本次请求。
+
+git clone -b backend_dev git@gitlab-esd.leapmotor.com:TEST/IOV_TEST/Adas_Vehicle_Test/lpATMP.git
+git clone：git 核心拉取命令，作用是把远程完整代码仓库复制下载到本地，自动完成创建项目文件夹、执行git init初始化本地仓库、绑定远程仓库地址全套操作，不用手动初始化。
+-b backend_dev：clone 的附加参数，指定只拉取并切换到远程名为backend_dev的分支，下载完成后本地直接处于该分支，不会默认切到 master/main 主分支。
+git@gitlab-esd.leapmotor.com：SSH 协议连接地址，代表通过 SSH 密钥方式登录零跑内部 GitLab 私有代码仓库，无需输入账号密码，依赖本地配置好的 ssh 公私钥鉴权。
+TEST/IOV_TEST/Adas_Vehicle_Test/lpATMP.git：远程仓库完整路径，TEST/IOV_TEST/Adas_Vehicle_Test是仓库分组目录，lpATMP是目标项目仓库名称，.git标识这是 git 远程仓库地址。
+
+
+Get-ChildItem -Recurse -Force -Directory -Filter "__pycache__" | Remove-Item -Recurse -Force
+递归删除__pycache__文件夹
+# 删除原来的origin
+git remote remove origin
+# 添加新github地址
+git remote add origin git@github.com:qiqi-7q/shixi.git
+git branch     查看本地所有分支
+git push --set-upstream origin backend_dev    在远程仓库创建 backend_dev 分支；把本地 backend_dev 和远程 origin/backend_dev 绑定，后续直接输入 git push 就能推送，不用再加参数。之后可以直接git push   git pull  Git 自动识别对应远程分支推送 / 拉取。
+git push --set-upstream origin backend_dev:backend_dev1  当前本地分支是 backend_dev，想让远端分支叫 backend_dev1，执行这条命令
+git branch -vv   查看当前分支上游绑定关系
+git checkout 分支名   切换到已存在的本地分支
+git checkout -b 新分支名    新建分支 + 直接切换
+git push origin backend_dev = 把本地名叫 backend_dev 的分支，推送到远端仓库 origin 上同名的 backend_dev 分支
+git push -f origin backend_dev   强制推送，覆盖
+
+
+例子一：我目前是 已经和远程仓库连接  我想把本地backend_Dev代码上传到远程  完整的步骤
+（
+rm -rf ./backend/app/*/__pycache__
+git add .
+git commit -m "合并远端代码，解决main.py冲突，清理pyc缓存"
+git push origin backend_dev
+）
+
+例子二：下次正常无冲突上传代码通用完整步骤
+（
+git status 查看本地改动，确认要提交的文件
+git add .
+git commit -m "填写本次修改说明，例：新增测试记录上传附件逻辑"
+git pull origin backend_dev
+git push origin backend_dev
+）
+
+
+
+
+
+nginx ：对浏览器 → Nginx 是【服务端】   对后端 FastAPI → Nginx 是【客户端】
+
+浏览器仅会主动发起请求访问 Nginx 的 IP 和端口，全程不知道后端真实地址；当 Nginx 识别到请求路径以 /api 开头时，会独立新建一条网络连接，以自身服务器作为客户端主动去请求后端服务，后端处理完成后将数据返回给 Nginx，再由 Nginx 把结果原路传回浏览器，整个后端转发过程由 Nginx 内部完成，对浏览器完全透明，浏览器不存在自动跳转、直连后端的行为。
+
+nginx服务器存储前端代码，可以理解为访问nginx的ip+端口就是在访问前端界面(前端页面的访问地址就是nginx的ip+端口，事实上，前端代码只是存放在 Nginx 管理的服务器目录里，Nginx 只是负责把目录里的 html/js/css 静态文件返回给浏览器，前端代码本身没有独立端口、没有独立服务进程，它只是一堆静态文件，依附 Nginx 对外提供访问)
+
+自己理解：浏览器作为用户客户端，仅通过 Nginx 的 IP+8080 端口访问前端页面；页面发起的所有接口请求，地址依旧是 Nginx 的 IP + 端口拼接 /api/xxx。当 Nginx 识别到请求匹配 /api 或 /static/ 规则时，它会切换身份：原本面向浏览器是被动等待连接的服务端，此刻主动充当客户端，新建网络连接去访问真实后端 10.192.183.117:8000，拿到后端返回的数据后再原路传回浏览器，整个转发过程浏览器完全感知不到后端真实地址。
+
+
+添加企业微信机器人的思路：
+司机（外网企业微信客户端）发送消息 → 企业微信云端机器人服务（外网腾讯服务器）
+内网业务程序主动出站建立 WS 长连接与腾讯云端机器人互通 → 程序接收消息后内网调用内部测试记录平台接口完成数据上传
+1.司机在外使用企业微信发消息（外网通信）
+2.消息先送达企业微信外网云端机器人服务
+3.内网服务器上的机器人程序主动向外建立长连接，和云端机器人双向通信接收消息
+4.内网程序基于内网网络，调用内网业务平台接口，上传测试记录数据
+
+
+
+
+
+
+
+
